@@ -108,4 +108,12 @@ Plot.MAs_list = function(output_Run.DEseq2, list.genes= c(), file.type = "image/
     
 }
 
+#Example:
+options(warn=-1);
+SpikeIn.Mean = mean( 100444, 100494, 121833,     122693, 99896, 124341  );
 
+#DEseq at Gencode genes GBs --> HS vs NHS (no dTAG)
+DEseq.res_HS.dTAG_NHS.GB = Run.DEseq2(PROseq.list = PROseq.HS.dTAG_HS, ranges = m.GB, spikeins.list = c( 100444/SpikeIn.Mean, 100494/SpikeIn.Mean, 121833/SpikeIn.Mean, 122693/SpikeIn.Mean, 99896/SpikeIn.Mean, 124341/SpikeIn.Mean ))
+
+#Generate MS plot
+    Plot.MAs( DEseq.res_HS.dTAG_NHS.GB, file.type = "image/png", limits = c(-6, 6) )
