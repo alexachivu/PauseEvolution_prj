@@ -1,0 +1,42 @@
+require(rBLAST)
+require(stringr)
+require(data.table)
+require(reshape2)
+require(pheatmap)
+require(plyr)
+require(prodlim)
+require(taxize)
+require(ggtree)
+require(ggplot2)
+
+recipBlast<-function(queryFile,querydbFile,targetdbFile,n_init=1,n_recip=20,cut=1e-5,blastType='blastp'){
+  queryBlastdb<-blast(db=querydbFile,type=blastType)
+  targetBlastdb<-blast(db=targetdbFile,type=blastType)
+  
+  querySeq <- readAAStringSet(filepath=queryFile)
+  targetSeq<-readAAStringSet(filepath=targetdbFile)
+  
+  results<-as.data.frame(names(querySeq))
+  results$present<-unlist(mclapply(c(1:length(querySeq)),function(x){
+    initialBlast <- predict(targetBlastdb, querySeq[x,])
+    temp<-initialBlast[1:n_init,]
+    temp<-temp[temp[,11]<cut,2]
+    indexSubset<-sapply(as.character((temp)),function(x) which(str_detect(names(targetSeq),x)==TRUE))
+    
+    recipSeq<-targetSeq[indexSubset,]
+    if(length(indexSubset)!=0){
+      recipBlast<-predict(queryBlastdb,recipSeq)
+      recipBlast<-recipBlast[1:min(n_recip,nrow(recipBlast)),]
+      presence<-sum(str_detect(recipBlast[recipBlast[,11]<cut,2],levels(initialBlast[,1])))
+    }else{
+      presence<-0
+    }
+    if(presence!=0)
+      1
+    else
+      0
+  }))
+  return(as.data.frame(results))
+}
+
+Capsaspora_owczarzaki_recipBlast<-recipBlast(queryFile='HumanPausingProteins.fa',querydbFile='UniprotHumanProteins.fasta',targetdbFile='Capsaspora_owczarzaki_atcc_30864_gca_000151315.C_owczarzaki_V2.pep.all.fa',cut=0.01)
