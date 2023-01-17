@@ -1,4 +1,4 @@
-### Script wrote by Gilad Barshad
+### Script adapted from Gilad Barshad
 
 import pandas as pd
 import os
