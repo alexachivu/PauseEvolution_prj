@@ -1,3 +1,4 @@
+### Script wrote by Wilfred Wong
 require(bigWig)
 require(RColorBrewer)
 require(prodlim)
