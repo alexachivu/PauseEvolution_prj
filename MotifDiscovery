@@ -1,4 +1,5 @@
-#R --vanilla --slave --args $(pwd) HT_allReads_TSS_maxTSNs+-10.txt HT_allReads_TSS_maxTSNs+-10_SeqLogo.pdf < getSeqLogo.R
+### Script wrote by Shao-Pei Chu
+#R --vanilla --slave --args $(pwd) Input.txt Output.pdf < getSeqLogo.R
 # only use bed regions with at least 5 VALID mat AND 5 pat VALID reads
 
 #arguments here
