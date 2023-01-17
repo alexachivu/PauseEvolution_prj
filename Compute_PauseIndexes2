@@ -1,0 +1,118 @@
+suppressPackageStartupMessages({
+    library(rtracklayer)
+    library(optparse)
+    library(GenomicRanges)
+    library(gridExtra)
+    library(ggplot2)
+    library(foreach)
+    library(iterators)
+    library(reshape2)
+    library(BRGenomics)
+    library(dplyr)
+    library(tidyverse)
+});
+
+loadRData <- function(fileName){
+    #loads an RData file, and returns it
+        load(fileName)
+        get(ls()[ls() != "fileName"])
+}
+
+Extend <- function(x, upstream = 0, downstream = 0){
+    
+    if (any(strand(x) == "*"))
+        warning("'*' ranges were treated as '+'")
+    on_plus <- strand(x) == "+" | strand(x) == "*"
+    new_start <- start(x) - ifelse(on_plus, upstream, downstream)
+    new_end <- end(x) + ifelse(on_plus, downstream, upstream)
+    ranges(x) <- IRanges(new_start, new_end)
+    trim(x)
+}
+
+Get_PRO_cts = function( gene.list, BW_plus.path, BW_minus.path, binsize = 10){
+    options(warn=-1)
+    #Import PROseq BigWig files
+        PRO_plus = import.bw(BW_plus.path, which = gene.list);
+        PRO_minus = import.bw(BW_minus.path, which = gene.list);
+
+    #Set the strand
+        strand(PRO_plus) = "+";
+        strand(PRO_minus) = "-";
+    
+    #Merge PROseq plus and minus strands & convert to BRG
+        PROseq = makeGRangesBRG( append( PRO_plus, PRO_minus ) );
+        PROseq$Norm.score = abs(PROseq$score);    
+    
+    #Count signal around TREs 
+        PROseq.cts = getCountsByRegions(PROseq, gene.list);
+
+    return(PROseq.cts)
+    
+}
+
+
+Import.bw = function( BW_plus.path, BW_minus.path){
+    options(warn=-1)
+    #Import PROseq BigWig files
+        PRO_plus = import.bw(BW_plus.path, which = gene.list);
+        PRO_minus = import.bw(BW_minus.path, which = gene.list);
+
+    #Set the strand
+        strand(PRO_plus) = "+";
+        strand(PRO_minus) = "-";
+    
+    #Merge PROseq plus and minus strands & convert to BRG
+        PROseq = makeGRangesBRG( append( PRO_plus, PRO_minus ) );
+        PROseq$Norm.score = abs(PROseq$score);    
+    
+ 
+    return(PROseq)
+    
+}
+
+Pause.index_calculator <- function( new.TSS_5prime, old.annotations_GRanges, BW_plus, BW_minus ){
+    options(warn=-1)
+
+    #Define the pause based on the new TSS annotations
+    new_pause <- loadRData(new.TSS_5prime);
+    
+    #Get average gene length per species
+    avg_gene.length = mean(width(old.annotations_GRanges));
+    print(avg_gene.length)
+
+    new_reann.TSS   = resize( new_pause, fix = "center", width = 1);
+    new_reann.TSS   = promoters(new_reann.TSS, upstream = 0, downstream = 500);
+    TSS_plus.200    = resize(new_reann.TSS, fix = "end", width = 1);
+    GB_coord    = promoters(TSS_plus.200, upstream = 0, downstream = 1000 );
+  
+    #Get counts per pause and GB regions
+    pause_cts = Get_PRO_cts(
+                             gene.list = new_pause,
+                             BW_plus.path = BW_plus,
+                             BW_minus.path = BW_minus
+                            )
+
+    GB_cts = Get_PRO_cts(
+                             gene.list = GB_coord,
+                             BW_plus.path = BW_plus,
+                             BW_minus.path = BW_minus
+                            )
+    
+    #Filter on gene expression
+    new_pause$pause_cts = abs(pause_cts);
+    new_pause$GB_cts    = abs(GB_cts);
+    
+    #Filter on expression
+    new_pause = new_pause[order(new_pause$GB_cts, decreasing = TRUE), ]
+    new_pause = new_pause[ (new_pause$GB_cts >= 5), ]
+
+
+    #Compute PIs
+    new_pause$PIs = (new_pause$pause_cts)/(new_pause$GB_cts);
+    new_pause = new_pause[!is.na(new_pause$PIs)]
+    new_pause = new_pause[ !(new_pause$PIs %in% c("Inf", "-Inf")) ]
+    
+    
+
+    return(new_pause)
+}
