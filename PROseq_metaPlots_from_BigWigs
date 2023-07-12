@@ -138,3 +138,46 @@ Count.reads.InBins = function(bw.file, regions = genes, binsize = 10, field = "s
     #return(res2)
 
 }
+
+
+##################################################################################################
+#                                                                                                #
+# Plotting using ggplot2                                                                         #
+#                                                                                                #
+##################################################################################################
+
+# Set plotting parameters
+options(jupyter.plot_mimetypes="image/svg+xml", repr.plot.width=3, repr.plot.height=2);
+
+theme_set(
+   theme_classic() +
+        theme(
+            panel.border = element_blank(),  
+            # Remove panel background
+            panel.background = element_blank(),
+            legend.background = element_blank(),
+            # Add axis line
+            axis.line = element_line(colour = "black", size=0.5),
+            panel.grid.major = element_line(colour = "white"),
+            axis.text.x = element_text( color="black", size=14),
+            axis.text.y = element_text( color="black", size=16),
+            axis.title.x = element_text(color="black", size=14),
+            axis.title.y = element_text(color="black", size=16)
+            )
+);
+
+
+# Plot on a linear scale
+# matrix = corresponds to the output from Import.bws_PROseq
+
+        ggplot(arrange(matrix, sample.name), aes(x=x, y=mean, color=sample.name)) +
+        geom_line(show.legend = F, lwd=0.7, alpha=0.8) +
+        geom_ribbon( aes( ymin=lower, ymax=upper, fill=sample.name ), alpha=0.2, size=0, show.legend = F ) +
+        scale_colour_manual(values = c("red", "pink", "orange", "black", "blue", "green")) +
+        scale_y_continuous() +
+        #scale_y_log10(labels = c(0.1, 1, 10, 100), breaks=c(1e-07, 1e-06, 1e-05, 1e-04)) +        
+        scale_x_continuous(labels = c(-150, 0, 150), breaks=c(0, 15, 30)) +
+        labs(
+            x = "Distance from TSS [bp]",
+            y = "Normalized \n PROseq signal"
+        ) 
