@@ -81,7 +81,7 @@ Pause.index_calculator <- function( new.TSS_5prime, old.annotations_GRanges, BW_
     print(avg_gene.length)
 
     new_reann.TSS   = resize( new_pause, fix = "center", width = 1);
-    new_reann.TSS   = promoters(new_reann.TSS, upstream = 0, downstream = 500);
+    new_reann.TSS   = promoters(new_reann.TSS, upstream = 0, downstream = 200);
     TSS_plus.200    = resize(new_reann.TSS, fix = "end", width = 1);
     GB_coord    = promoters(TSS_plus.200, upstream = 0, downstream = 1000 );
   
