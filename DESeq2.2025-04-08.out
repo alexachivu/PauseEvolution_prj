@@ -1,0 +1,252 @@
+
+R version 4.4.2 (2024-10-31) -- "Pile of Leaves"
+Copyright (C) 2024 The R Foundation for Statistical Computing
+Platform: x86_64-pc-linux-gnu
+
+R is free software and comes with ABSOLUTELY NO WARRANTY.
+You are welcome to redistribute it under certain conditions.
+Type 'license()' or 'licence()' for distribution details.
+
+  Natural language support but running in an English locale
+
+R is a collaborative project with many contributors.
+Type 'contributors()' for more information and
+'citation()' on how to cite R or R packages in publications.
+
+Type 'demo()' for some demos, 'help()' for on-line help, or
+'help.start()' for an HTML browser interface to help.
+Type 'q()' to quit R.
+
+> # Load necessary libraries
+> library(DESeq2)
+> 
+> # Load concatenated count data from intervals
+> load("/workdir/cgd24/NELF_dTAG_HS/interval_counts.RData")
+> 
+> # Load spike-in counts
+> load("spikein_counts.RData")  # should create spikein_counts_df
+> 
+> # Focus on interval 3 for DESeq2 analysis
+> if (is.null(interval3_counts)) {
++     stop("Interval 3 counts are not available.")
++ }
+> 
+> # Filter samples to include only those in the HS/NHS condition, with and without dTAG treatment
+> selected_samples <- grep("NELFb.(NdT|dT).*(HS|NHS)", colnames(interval3_counts))
+> filtered_counts <- interval3_counts[, selected_samples]
+> 
+> # Prepare unique gene names using a random number since start and end are not available
+> set.seed(42)  # For reproducibility
+> rownames(filtered_counts) <- paste0(interval3_counts[, "gene_name"], "_", sample(1e6, nrow(filtered_counts), replace = FALSE))
+> 
+> # Prepare colData for DESeq2, including sample conditions, cell lines, and dTAG treatment
+> sample_names <- colnames(filtered_counts)
+> condition <- ifelse(grepl("NHS", sample_names), "No_Heat_Shock", "Heat_Shock")
+> cell_line <- ifelse(grepl("NELFb", sample_names), "NELFb", "NELFe")
+> dtag_treatment <- ifelse(grepl("NdT", sample_names), "No_dTAG", "dTAG")
+> col_data <- data.frame(row.names = sample_names, 
++                        condition = factor(condition), 
++                        cell_line = factor(cell_line),
++                        dtag_treatment = factor(dtag_treatment))
+> 
+> # Prepare DESeq2 dataset with condition, cell line, and dTAG treatment as fixed effects, including interaction term
+> dds <- DESeqDataSetFromMatrix(countData = filtered_counts,
++                               colData = col_data,
++                               design = ~ dtag_treatment + condition)
+> 
+> dds$condition <- relevel(dds$condition, ref = "No_Heat_Shock")
+> dds$dtag_treatment <- relevel(dds$dtag_treatment, ref = "No_dTAG")
+> 
+> # --- Add spike-in size factors ---
+> 
+> # Ensure matching sample order
+> #stopifnot(all(spikein_counts_df$sample %in% colnames(dds))) ## Returns FALSE because we've already removed NELFe.
+> spikein_counts_df <- spikein_counts_df[match(colnames(dds), spikein_counts_df$sample), ]
+> 
+> # Compute inverse fraction as size factor, normalize to geometric mean 1
+> size_factors <- spikein_counts_df$spikein_reads
+> size_factors <- size_factors / mean(size_factors) #exp(mean(log(size_factors))) ## Alex used mean, not geometric mean.
+> 
+> # Set size factors manually
+> sizeFactors(dds) <- size_factors
+> 
+> 
+> # Run DESeq2 differential expression analysis. 
+> #dds <- DESeq(dds) ## DO NOT DO THIS since we are manually setting size factors.
+> 
+> # Run DESeq2, skipping size factor estimation
+> dds <- estimateDispersions(dds)
+> dds <- nbinomWaldTest(dds)
+> 
+> results_names <- resultsNames(dds)
+> 
+> # Extract interaction results for Heat Shock vs No Heat Shock modulated by dTAG treatment
+> res <- results(dds, name = "condition_Heat_Shock_vs_No_Heat_Shock")
+> 
+> # Sort results by adjusted p-value
+> res <- res[order(res$padj, na.last = NA), ]
+> 
+> # NOW: Take genes that are up-regulated in the condition condition_Heat_Shock_vs_No_Heat_Shock
+> upregulated_genes <- res[res$log2FoldChange > 0 & res$padj < 0.05, ]
+> upregulated_genes
+log2 fold change (MLE): condition Heat Shock vs No Heat Shock 
+Wald test p-value: condition Heat Shock vs No Heat Shock 
+DataFrame with 485 rows and 6 columns
+                   baseMean log2FoldChange     lfcSE      stat      pvalue
+                  <numeric>      <numeric> <numeric> <numeric>   <numeric>
+Hsph1_797858       1322.303        4.28281  0.222025   19.2898 6.54827e-83
+Hist1h2be_492743   2296.678        2.41026  0.154771   15.5730 1.11034e-54
+Hist1h2be_330259   2296.372        2.41003  0.154754   15.5733 1.10491e-54
+Tfec_350791         173.111        2.50982  0.201367   12.4639 1.17474e-35
+Crocc2_180831       410.904        1.97829  0.162015   12.2106 2.72927e-34
+...                     ...            ...       ...       ...         ...
+C1qtnf7_311764      8.49947       1.092067  0.496899   2.19776   0.0279659
+Rapgef4_959035    162.41074       0.452247  0.206170   2.19356   0.0282670
+Nf2_202055       1195.69325       0.343430  0.157139   2.18551   0.0288513
+Lrrk1_932750      162.92093       0.477498  0.218543   2.18492   0.0288950
+Rab11fip4_688432  391.03671       0.455449  0.208519   2.18421   0.0289471
+                        padj
+                   <numeric>
+Hsph1_797858     8.58413e-79
+Hist1h2be_492743 1.11965e-51
+Hist1h2be_330259 1.11965e-51
+Tfec_350791      3.94862e-33
+Crocc2_180831    7.77784e-32
+...                      ...
+C1qtnf7_311764     0.0482121
+Rapgef4_959035     0.0486992
+Nf2_202055         0.0495950
+Lrrk1_932750       0.0496506
+Rab11fip4_688432   0.0497337
+> 
+> downregulated_genes <- res[res$log2FoldChange < 0 & res$padj < 0.05, ]
+> downregulated_genes
+log2 fold change (MLE): condition Heat Shock vs No Heat Shock 
+Wald test p-value: condition Heat Shock vs No Heat Shock 
+DataFrame with 7150 rows and 6 columns
+                      baseMean log2FoldChange     lfcSE      stat      pvalue
+                     <numeric>      <numeric> <numeric> <numeric>   <numeric>
+Cdk12_130020           813.490       -3.39568  0.178344  -19.0401 7.93958e-81
+Bnip3_564847           154.102       -3.94534  0.215977  -18.2674 1.50344e-74
+Med1_198061            792.368       -3.60360  0.197781  -18.2201 3.57496e-74
+Med1_435003            789.920       -3.60031  0.197566  -18.2233 3.37075e-74
+Cdk12_255934          1107.013       -3.03142  0.175750  -17.2484 1.14958e-66
+...                        ...            ...       ...       ...         ...
+E130006D01Rik_478614   25.6835      -0.707448  0.323913  -2.18407   0.0289572
+Sh2b3_934987          177.5052      -0.425878  0.195000  -2.18399   0.0289633
+Pde7a_857125          589.3813      -0.407928  0.186827  -2.18345   0.0290028
+Smap2_771019          185.7684      -0.509185  0.233213  -2.18335   0.0290100
+Xrcc2_737828           10.5028      -0.886228  0.405963  -2.18302   0.0290341
+                            padj
+                       <numeric>
+Cdk12_130020         5.20400e-77
+Bnip3_564847         6.56954e-71
+Med1_198061          9.37284e-71
+Med1_435003          9.37284e-71
+Cdk12_255934         2.51165e-63
+...                          ...
+E130006D01Rik_478614   0.0497445
+Sh2b3_934987           0.0497485
+Pde7a_857125           0.0498098
+Smap2_771019           0.0498156
+Xrcc2_737828           0.0498505
+> 
+> ## NOW Get adjusted counts for each condition, averaging the replicates.
+> # Extract model-adjusted counts for all samples
+> adjusted_counts <- counts(dds, normalized = TRUE)
+> adjusted_counts <- as.data.frame(adjusted_counts)
+> 
+> # Helper function to extract prefixes (first three parts of column names)
+> extract_prefix <- function(name) {
++   sapply(strsplit(name, "\\."), function(x) paste(x[1:3], collapse = "."))
++ }
+> 
+> # Extract prefixes from column names
+> prefixes <- extract_prefix(colnames(adjusted_counts))
+> unique_prefixes <- unique(prefixes)  # Get unique prefixes
+> 
+> # Initialize an empty data frame to store results
+> averaged_counts <- data.frame(row.names = rownames(adjusted_counts))
+> 
+> # Loop over unique prefixes
+> for (prefix in unique_prefixes) {
++   # Identify columns belonging to the current prefix
++   matching_columns <- which(prefixes == prefix)
++   
++   # Calculate rowMeans for those columns
++   averaged_counts[[prefix]] <- rowMeans(adjusted_counts[, matching_columns, drop = FALSE], na.rm = TRUE)
++ }
+> 
+> # Resulting data frame with averaged counts
+> head(averaged_counts)
+             NELFb.dT.HS NELFb.dT.NHS NELFb.NdT.HS NELFb.NdT.NHS
+Adora1_61413    61.64724     51.27779     88.76310      26.99554
+Adora1_54425    59.79166     50.01175     87.24997      26.55936
+Prim2_623844  2076.96275   2845.20565   3217.42011    3567.70595
+Sntg1_74362    486.70296    451.35370    658.43193    1605.41074
+Cflar_46208    140.37724    226.48997    168.31997     366.76368
+Cflar_964632   143.57331    244.83159    179.11703     383.17159
+> 
+> ## Now check out summaries for changes.
+> # Step 1: Filter columns containing "NELFb"
+> columns_nelfb <- grep("NELFb", colnames(averaged_counts), value = TRUE)
+> nelfb_counts <- averaged_counts[, columns_nelfb]
+> 
+> # Step 2: Filter rows where res$padj < 0.05 and res$log2FoldChange > 0.0
+> significant_genes_upregulated <- rownames(res[res$padj < 0.05 & res$log2FoldChange > 0.0, ])
+> filtered_counts <- nelfb_counts[rownames(nelfb_counts) %in% significant_genes_upregulated, ]
+> 
+> # Step 3: Subset rows with little/no difference between "NELFb.NdT.NHS" and "NELFb.dT.NHS"
+> # Retrieve the two specific columns
+> # Define a pseudocount
+> pc <- 0.01
+> 
+> ndt_nhs <- filtered_counts[, "NELFb.NdT.NHS"] + pc
+> dt_nhs <- filtered_counts[, "NELFb.dT.NHS"] + pc
+> 
+> # Identify genes with abs(log2 fold change) < 0.5 between these two columns
+> small_diff_genes <- abs(log2(ndt_nhs / dt_nhs)) < 0.5
+> filtered_counts <- filtered_counts[small_diff_genes, ]
+> 
+> # Step 4: Compute log2 fold change for specific column comparisons
+> ndt_hs <- filtered_counts[, "NELFb.NdT.HS"] + pc
+> dt_hs <- filtered_counts[, "NELFb.dT.HS"] + pc
+> 
+> ndt_nhs <- filtered_counts[, "NELFb.NdT.NHS"] + pc
+> dt_nhs <- filtered_counts[, "NELFb.dT.NHS"] + pc
+> 
+> # Compute log2 fold change
+> log2fc_ndt <- log2(ndt_hs / ndt_nhs)
+> log2fc_dt <- log2(dt_hs / dt_nhs)
+> 
+> # Generate summary statistics for the log2 fold changes
+> summary_ndt <- summary(log2fc_ndt)
+> summary_dt <- summary(log2fc_dt)
+> 
+> # Print results
+> cat("Summary of log2 fold change for NELFb.NdT:\n")
+Summary of log2 fold change for NELFb.NdT:
+> print(summary_ndt)
+    Min.  1st Qu.   Median     Mean  3rd Qu.     Max. 
+-0.08452  0.79202  1.09566  1.21864  1.42046  8.88253 
+> 
+> cat("\nSummary of log2 fold change for NELFb.dT:\n")
+
+Summary of log2 fold change for NELFb.dT:
+> print(summary_dt)
+    Min.  1st Qu.   Median     Mean  3rd Qu.     Max. 
+0.008288 0.506521 0.737578 0.967179 1.200300 8.319213 
+> 
+> cat("\nWilcox test for difference:\n")
+
+Wilcox test for difference:
+> wilcox.test(log2fc_ndt, log2fc_dt)
+
+	Wilcoxon rank sum test with continuity correction
+
+data:  log2fc_ndt and log2fc_dt
+W = 27915, p-value = 9.746e-08
+alternative hypothesis: true location shift is not equal to 0
+
+> 
+> 
